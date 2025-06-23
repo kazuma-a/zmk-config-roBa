@@ -1,5 +1,45 @@
-on: [push, pull_request, workflow_dispatch]
+name: Build ZMK firmware
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
-    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@main
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git python3-pip cmake ninja-build gperf dfu-util device-tree-compiler wget
+          pip3 install --user west
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Initialize west and update
+        run: |
+          west init -l config
+          west update
+          west zephyr-export
+
+      - name: Build left firmware
+        run: |
+          west build -s config -d build/left -b roba_left -- -DSHIELD=roba_left
+
+      - name: Build right firmware
+        run: |
+          west build -s config -d build/right -b roba_right -- -DSHIELD=roba_right
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zmk-firmware
+          path: |
+            build/left/zephyr/zmk.uf2
+            build/right/zephyr/zmk.uf2
